@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NHL Fantasy Helper</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>NHL Fantasy Helper</h1>
+    <p>Team & player stats + line combinations (power-play units) — daily snapshots.</p>
+  </header>
+
+  <main>
+    <aside id="left">
+      <div class="card">
+        <label>Season: <input id="season" value="20252026" /></label>
+        <label>Search: <input id="team-search" placeholder="team name or abbrev" /></label>
+        <button id="refresh">Refresh</button>
+        <div id="note" class="muted"></div>
+      </div>
+
+      <div class="card">
+        <h2>Teams</h2>
+        <div id="teams-list">Loading teams…</div>
+      </div>
+    </aside>
+
+    <section id="main">
+      <div class="card">
+        <h2 id="detail-title">Team detail</h2>
+        <pre id="team-stats">Select a team</pre>
+      </div>
+
+      <div class="card">
+        <h3>Roster</h3>
+        <div id="roster">Select a team to load roster</div>
+      </div>
+
+      <div class="card">
+        <h3>Power Play Unit (TheMorningPuck snapshot)</h3>
+        <pre id="pp-unit">No PP snapshot yet. Run the fetch script.</pre>
+      </div>
+
+      <div class="card">
+        <h3>Player / Analysis</h3>
+        <pre id="analysis-content">Select a player or run analysis.</pre>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>Sources: NHL public API, TheMorningPuck (scraped). Use responsibly.</small>
+  </footer>
+
+<script>
+const NHL_API_BASE = 'https://statsapi.web.nhl.com/api/v1';
+
+async function fetchJSON(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(res.status + ' ' + res.statusText + ' ' + url);
+  return res.json();
+}
+
+async function loadTeams(season){
+  return fetchJSON(`${NHL_API_BASE}/teams?season=${season}`);
+}
+
+async function loadTeamStats(teamId, season){
+  return fetchJSON(`${NHL_API_BASE}/teams/${teamId}/stats?season=${season}`);
+}
+
+async function loadRoster(teamId){
+  return fetchJSON(`${NHL_API_BASE}/teams/${teamId}?expand=team.roster`);
+}
+
+async function loadPPSnapshot(teamSlug){
+  // Try to read server-side snapshot first (avoids CORS)
+  try {
+    const fn = `data/morningpuck_${teamSlug}.json`;
+    const res = await fetch(fn);
+    if (res.ok) {
+      const obj = await res.json();
+      return obj.htmlSnippet || (obj.html || 'No snippet field');
+    }
+  } catch(e){}
+  // If no snapshot, indicate not available in-browser
+  return 'No server snapshot available. If this is Codespaces run the fetch script (scripts/fetch-data.js) or enable Actions.';
+}
+
+function slugFromName(name){
+  return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+}
+
+function renderTeamList(teams){
+  const el = document.getElementById('teams-list');
+  el.innerHTML = '';
+  teams.forEach(t=>{
+    const btn = document.createElement('button');
+    btn.className = 'team-btn';
+    btn.textContent = `${t.name} (${t.abbreviation})`;
+    btn.onclick = ()=>selectTeam(t);
+    el.appendChild(btn);
+  });
+}
+
+async function selectTeam(team){
+  document.getElementById('detail-title').textContent = team.name;
+  document.getElementById('team-stats').textContent = 'Loading stats...';
+  document.getElementById('roster').textContent = 'Loading roster...';
+  document.getElementById('pp-unit').textContent = 'Loading PP snapshot...';
+
+  try{
+    const season = document.getElementById('season').value;
+    const [statsRes, rosterRes] = await Promise.all([
+      loadTeamStats(team.id, season),
+      loadRoster(team.id)
+    ]);
+    const stats = statsRes.stats?.[0] || statsRes;
+    document.getElementById('team-stats').textContent = JSON.stringify(stats, null, 2);
+
+    const roster = rosterRes.teams?.[0]?.roster?.roster || [];
+    const rosterDiv = document.getElementById('roster');
+    rosterDiv.innerHTML = '';
+    roster.forEach(p=>{
+      const b = document.createElement('button');
+      b.className = 'player-btn';
+      b.textContent = `${p.person.fullName} ${p.jerseyNumber?('#'+p.jerseyNumber):''} (${p.position?.abbreviation||''})`;
+      b.onclick = ()=>loadPlayer(p.person.id);
+      rosterDiv.appendChild(b);
+    });
+
+    const slug = slugFromName(team.name);
+    const pp = await loadPPSnapshot(slug);
+    document.getElementById('pp-unit').textContent = pp;
+  }catch(err){
+    document.getElementById('team-stats').textContent = 'Error: ' + err.message;
+    console.error(err);
+  }
+}
+
+async function loadPlayer(playerId){
+  const el = document.getElementById('analysis-content');
+  el.textContent = 'Loading player stats...';
+  try{
+    const season = document.getElementById('season').value;
+    const url = `${NHL_API_BASE}/people/${playerId}/stats?stats=statsSingleSeason&season=${season}`;
+    const res = await fetchJSON(url);
+    el.textContent = JSON.stringify(res, null, 2);
+  }catch(err){
+    el.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function run(){
+  document.getElementById('note').textContent = 'If the site cannot fetch MorningPuck due to CORS, run the fetch script server-side to create snapshots under /data.';
+  try{
+    const season = document.getElementById('season').value;
+    const res = await loadTeams(season);
+    const teams = res.teams || [];
+    renderTeamList(teams);
+    document.getElementById('analysis-content').textContent = 'Select a team to begin.';
+  }catch(err){
+    document.getElementById('teams-list').textContent = 'Error loading teams: ' + err.message;
+  }
+}
+
+document.getElementById('refresh').onclick = run;
+document.getElementById('team-search').oninput = function(e){
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll('#teams-list .team-btn').forEach(b=>{
+    b.style.display = b.textContent.toLowerCase().includes(q) ? 'block' : 'none';
+  });
+};
+
+run();
+</script>
+</body>
+</html>
