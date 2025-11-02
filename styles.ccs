@@ -1,0 +1,9 @@
+body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:12px;background:#f4f6f8;color:#0b1220}
+header{margin-bottom:12px}
+main{display:flex;gap:12px}
+#left{width:300px}
+.card{background:#fff;padding:12px;border-radius:8px;box-shadow:0 6px 18px rgba(12,20,30,0.06);margin-bottom:12px}
+#teams-list{max-height:60vh;overflow:auto}
+.team-btn, .player-btn{display:block;width:100%;text-align:left;margin:6px 0;padding:8px;border-radius:6px;border:1px solid #e6eef6;background:#f9fbff;cursor:pointer}
+.muted{font-size:12px;color:#666;margin-top:8px}
+pre{white-space:pre-wrap;max-height:40vh;overflow:auto;padding:8px;background:#f7f9fc;border-radius:6px}
