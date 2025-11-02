@@ -1,0 +1,9 @@
+{
+  "name": "nhl-fantasy-helper",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12"
+  }
+}
